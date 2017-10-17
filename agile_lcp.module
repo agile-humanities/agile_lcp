@@ -1,0 +1,391 @@
+<?php
+/**
+ * @file
+ * Module hooks.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function agile_lcp_menu() {
+  return array(
+    'agile/harvest/oai' => array(
+      'title' => 'Harvest from OAI',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('agile_lcp_harvest_form'),
+      'type' => MENU_NORMAL_ITEM,
+      'file' => 'includes/harvest_form.inc',
+      'access arguments' => array('ingest fedora objects'),
+    ),
+    'agile/prep/oai' => array(
+      'title' => 'Prep OAI HArvest',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('agile_lcp_prep_harvest'),
+      'type' => MENU_NORMAL_ITEM,
+      'file' => 'includes/harvest_prep.form.inc',
+      'access arguments' => array('ingest fedora objects'),
+    ),
+    'admin/islandora/solution_pack_config/lcp' => array(
+      'title' => 'LCP Configuration',
+      'description' => 'Configure the LCP module.',
+      'page callback' => 'drupal_get_form',
+      'access arguments' => array('administer site configuration'),
+      'page arguments' => array('agile_lcp_admin_settings_form'),
+      'file' => 'includes/admin.form.inc',
+      'type' => MENU_NORMAL_ITEM,
+    ),
+   'islandora/object/%islandora_object/manage/datastreams/updatemxml' =>array(
+      'title' => 'Update MarcXML',
+      'file' => 'includes/utilities.inc',
+      'page callback' => 'agile_update_marcXML',
+      'page arguments' => array(2),
+      'type' => MENU_LOCAL_ACTION,
+      'access callback' => 'islandora_object_access_callback',
+      'access arguments' => array(ISLANDORA_ADD_DS, 2),
+    ),
+  );
+}
+
+/**
+ * Implements hook_islandora_required_objects().
+ */
+function agile_lcp_islandora_required_objects(IslandoraTuque $connection) {
+  $module_path = drupal_get_path('module', 'agile_lcp');
+  // IOA Import Content Model.
+  $oai_content_model = $connection->repository->constructObject('islandora:oai_importCModel');
+  $oai_content_model->owner = 'fedoraAdmin';
+  $oai_content_model->label = 'Agile OAI Import Content Model';
+  $oai_content_model->models = 'fedora-system:ContentModel-3.0';
+  // DS-COMPOSITE-MODEL Datastream.
+  $datastream = $oai_content_model->constructDatastream('DS-COMPOSITE-MODEL', 'X');
+  $datastream->label = 'DS-COMPOSITE-MODEL';
+  $datastream->mimetype = 'application/xml';
+  $datastream->setContentFromFile("$module_path/xml/islandora_OAI_importCmodel_ds_composite_model.xml", FALSE);
+  $oai_content_model->ingestDatastream($datastream);
+  // Record Collection.
+  $oai_collection = $connection->repository->constructObject('islandora:imported_oai');
+  $oai_collection->owner = 'fedoraAdmin';
+  $oai_collection->label = 'Imported from OAI';
+  $oai_collection->models = 'islandora:collectionCModel';
+  // Collection Policy Datastream.
+  $datastream = $oai_collection->constructDatastream('COLLECTION_POLICY', 'X');
+  $datastream->label = 'Collection policy';
+  $datastream->mimetype = 'application/xml';
+  $datastream->setContentFromFile("$module_path/xml/agile_oai_import_collection_policy.xml", FALSE);
+  $oai_collection->ingestDatastream($datastream);
+  // TN Datastream.
+  $datastream = $oai_collection->constructDatastream('TN', 'M');
+  $datastream->label = 'Thumbnail';
+  $datastream->mimetype = 'image/png';
+  $datastream->setContentFromFile("$module_path/images/folder.png", FALSE);
+  $oai_collection->ingestDatastream($datastream);
+  return array(
+    'agile_lcp' => array(
+      'title' => 'OAI IMport',
+      'objects' => array(
+        $oai_content_model,
+        $oai_collection,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_islandora_solr_results_alter().
+ */
+function agile_lcp_islandora_solr_results_alter(&$search_results, $query_processor) {
+  $matches = array();
+  $identifiers = array();
+  $doubles = array();
+  foreach ($search_results as $index => &$result) {
+    if ($result['solr_doc'] && isset($result['content_models'])) {
+      if (isset($result['solr_doc']['mods_recordInfo_recordIdentifier_s'])) {
+        $identifier = $result['solr_doc']['mods_recordInfo_recordIdentifier_s'];
+        $identifiers[$index] = $identifier;
+        $is_oai = in_array('info:fedora/islandora:oai_importCModel', $result['content_models']);
+        $pairings[] = array('identifier' => $identifier, 'oai' => $is_oai);
+
+        $matches[] = $identifier;
+        if ($is_oai) {
+          $result['solr_doc']['mods_recordInfo_recordIdentifier_s'] = l($identifier, "http://pacscl.exlibrisgroup.com:48992/F?func=direct&doc_number=$identifier");
+          $result['object_url'] = "http://pacscl.exlibrisgroup.com:48992/F?func=direct&doc_number=$identifier";
+        }
+        else {
+          unset($result['solr_doc']['mods_recordInfo_recordIdentifier_s']);
+        }
+      }
+      if (isset($result['solr_doc']['dc.description'])) {
+        $is_collection = in_array('info:fedora/islandora:collectionCModel', $result['content_models']);
+        if (!$is_collection) {
+          unset($result['solr_doc']['dc.description']);
+        }
+      }
+    }
+  }
+  $values = array_count_values($identifiers);
+  foreach ($values as $identifier => $count) {
+    if ($count > 1) {
+      $doubles[] = $identifier;
+    }
+  }
+
+  if ($doubles) {
+    foreach ($doubles as $index => $identifier) {
+      if (in_array($identifier, $doubles)) {
+        foreach ($pairings as $key => $params) {
+          if ($params['oai']) {
+            unset($search_results[$key]);
+          }
+        }
+      }
+    }
+  }
+  $search_results = array_values($search_results);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function agile_lcp_form_islandora_solr_simple_search_form_alter(&$form, &$form_state, $form_id) {
+  $options = array(
+    'all' => t("All"),
+    'digital' => t("Digital Collections"),
+    'catalog' => t('Library Catalog'),
+  );
+  $form['search_choice'] = array(
+    '#weight' => -10,
+    '#type' => 'select',
+    '#options' => $options,
+  );
+
+  $form['#submit'] = array('agile_lcp_simple_search_submit');
+}
+
+/**
+ * Altered submit form for Islandora Simple Search.
+ */
+function agile_lcp_simple_search_submit($form, &$form_state) {
+  module_load_include('inc', 'islandora_solr', 'includes/utilities');
+  $search_string = islandora_solr_replace_slashes($form_state['values']['islandora_simple_search_query']);
+  switch ($form_state['values']['search_choice']) {
+    case 'digital':
+      $filter_val = '-RELS_EXT_hasModel_uri_s:"info\:fedora\/islandora\:oai_importCModel"';
+      break;
+
+    case 'catalog':
+      $filter_val = 'RELS_EXT_hasModel_uri_s:"info\:fedora\/islandora\:oai_importCModel"';
+      break;
+
+    default;
+      $filter_val = NULL;
+  }
+  $query = array('type' => 'edismax');
+  if ($filter_val) {
+    $query['f'] = array($filter_val);
+  }
+  $form_state['redirect'] = array(
+    "islandora/search/$search_string",
+    array(
+      'query' => $query,
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function agile_lcp_form_islandora_solr_advanced_search_form_alter_disabled(&$form, &$form_state, $form_id) {
+  $options = array(
+    'all' => t("All"),
+    'digital' => t("Digital Collections"),
+    'catalog' => t('Library Catalog'),
+  );
+  $form['search_choice'] = array(
+    '#weight' => -10,
+    '#type' => 'select',
+    '#options' => $options,
+  );
+
+  $form['#submit'] = array('agile_lcp_advanced_search_submit');
+}
+
+/**
+ * Islandora Solr advanced search form submit callback.
+ *
+ * @param array $form
+ *   An associative array containing form structure.
+ * @param array $form_state
+ *   An associative array containing form state.
+ *
+ * @see islandora_solr_advanced_search_form()
+ */
+function agile_lcp_advanced_search_submit($form, &$form_state) {
+  module_load_include('inc', 'islandora_solr', 'includes/utilities');
+
+  // Collect query values.
+  $query_array = array();
+
+  // Get Lucene syntax escaping configuration, prior to the following
+  // foreach loop.
+  $lucene_syntax_escape = variable_get('islandora_solr_advanced_search_block_lucene_syntax_escape', FALSE);
+  $lucene_regex = variable_get(
+      'islandora_solr_advanced_search_block_lucene_regex_default', ISLANDORA_SOLR_QUERY_FACET_LUCENE_ESCAPE_REGEX_DEFAULT
+  );
+
+  foreach ($form_state['values']['terms'] as $term) {
+    $field = islandora_solr_lesser_escape($term['field']);
+    $search = trim($term['search']);
+
+    $boolean = (isset($term['boolean'])) ? $term['boolean'] : variable_get('islandora_solr_search_boolean', 'user');
+
+    // Add query.
+    if (!empty($search)) {
+      $search = $lucene_syntax_escape ?
+          islandora_solr_facet_query_escape($search, $lucene_regex) :
+          islandora_solr_lesser_escape($search);
+
+      $query_array[] = array(
+        'search' => "$field:($search)",
+        'boolean' => $boolean,
+      );
+    }
+  }
+
+  // Create query.
+  $query = '';
+  $i = 0;
+  foreach ($query_array as $term) {
+    $query .= $term['search'];
+    if (count($query_array) - 1 != $i) {
+      $query .= ' ' . $term['boolean'] . ' ';
+    }
+    $i++;
+  }
+
+  // Check if query is empty.
+  if (empty($query)) {
+    if (variable_get('islandora_solr_base_advanced', FALSE)) {
+      $query = variable_get('islandora_solr_base_query', '*:*');
+    }
+    else {
+      $query = '*:*';
+    }
+  }
+
+  // Handle filters.
+  $filter = '';
+  if (isset($form_state['values']['islandora_solr_allow_preserve_filters']) && $form_state['values']['islandora_solr_allow_preserve_filters']) {
+    $filter = isset($_GET['f']) ? $_GET['f'] : '';
+  }
+  switch ($form_state['values']['search_choice']) {
+    case 'digital':
+      $filter_val = '-RELS_EXT_hasModel_uri_s:"info\:fedora\/islandora\:oai_importCModel"';
+      break;
+
+    case 'catalog':
+      $filter_val = 'RELS_EXT_hasModel_uri_s:"info\:fedora\/islandora\:oai_importCModel"';
+      break;
+
+    default;
+      $filter_val = NULL;
+  }
+  if ($filter_val) {
+    if ($filter) {
+      $filter[] = $filter_val;
+    }
+    else {
+      $filter = array($filter_val);
+    }
+  }
+  // Use work around for some special URL characters.
+  $query = islandora_solr_replace_slashes($query);
+
+  // Navigate to results page.
+  $form_state['redirect'] = array(
+    ISLANDORA_SOLR_SEARCH_PATH . "/$query",
+    $filter ? array('query' => array('f' => $filter)) : array(),
+  );
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function agile_lcp_form_islandora_collection_search_form_alter(&$form, &$form_state, $form_id) {
+  $search_node = variable_get('agile_lcp_search_node_id', '31');
+  if ($_GET['q'] == 'islandora/object/islandora:discovery' || current_path() == "node/$search_node") {
+    $options = array(
+      'all' => t("All Collections"),
+      'islandora:root' => t("Digital Collections"),
+      'islandora:imported_oai' => t('Library Catalog'),
+    );
+    $form['simple']['collection_select']['#type'] = 'radios';
+    $form['simple']['collection_select']['#options'] = $options;
+    $form['simple']['collection_select']['#default_value'] = 'all';
+    $form['simple']['discovery']['#type'] = 'hidden';
+    $form['simple']['discovery']['#value'] = '1';
+    unset($form['simple']['#attributes']);
+  }
+}
+
+/**
+ * Implements hook_CMODEL_PID_islandora_derivative().
+ */
+function agile_lcp_islandora_oai_importCModel_islandora_derivative() {
+  return array(
+    array(
+      'source_dsid' => 'MARC',
+      'destination_dsid' => 'MODS',
+      'weight' => '0',
+      'function' => array(
+        'agile_lcp_create_derived_streams',
+      ),
+      'file' => drupal_get_path('module', 'agile_lcp') . '/includes/derivatives.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_preprocess().
+ */
+function agile_lcp_preprocess_islandora_solr_grid(&$variables) {
+  agile_lcp_prepare_solr($variables);
+}
+
+/**
+ * Implements hook_process().
+ */
+function agile_lcp_process_islandora_solr(&$variables) {
+  agile_lcp_prepare_solr($variables);
+}
+
+/**
+ * Preps variables for process and preprocess hooks.
+ */
+function agile_lcp_prepare_solr(&$variables) {
+  module_load_include('inc', 'islandora_default_thumbs', 'includes/utilities');
+  islandora_default_thumbs_prepare_vars_for_solr_page_template($variables, 'results', 'search');
+  foreach ($variables['results'] as &$result) {
+    if (isset($variables['associated_objects_array'][$result['PID']]['full_config']['thumb'])) {
+      $result['thumbnail_url'] = $variables['associated_objects_array'][$result['PID']]['full_config']['thumb'];
+      $thumbnail = $result['thumbnail'];
+      $target = $result['object_url'];
+      $result['thumbnail'] = preg_replace('/href."/', "href=\"$target", $thumbnail);
+    }
+  }
+}
+
+/**
+ * Implements hook_islandora_solr_primary_display().
+ */
+function agile_lcp_islandora_solr_primary_display() {
+  return array(
+    'lcp' => array(
+      'name' => t('Filtered LCP Results'),
+      'module' => 'agile_lcp',
+      'file' => 'includes/lcp_results.inc',
+      'class' => "IslandoraSolrResultsLCP",
+      'function' => "displayResults",
+      'description' => t("Add Selected Results to Coursepack"),
+    ),
+  );
+}
