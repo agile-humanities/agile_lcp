@@ -34,6 +34,7 @@ function agile_lcp_menu() {
       'file' => 'includes/admin.form.inc',
       'type' => MENU_NORMAL_ITEM,
     ),
+
    'islandora/object/%islandora_object/manage/datastreams/updatemxml' =>array(
       'title' => 'Update MarcXML',
       'file' => 'includes/marc_reingest.form.inc',

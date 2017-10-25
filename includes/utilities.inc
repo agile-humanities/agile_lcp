@@ -16,8 +16,9 @@
  *   DOMDocument
  */
 function build_full_dom($url) {
-  $identifiers = [];
-  $tokens = [];
+
+  $identifiers = array();
+  $tokens = array();
   set_time_limit(0);
   $url_parts = explode('?', $url);
   $base_url = $url_parts[0] . "?verb=ListIdentifiers&resumptionToken=";
@@ -39,8 +40,7 @@ function build_full_dom($url) {
     $sub_dom = new DOMDocument();
     $sub_dom->loadXML($data);
     $new_identifiers = $dom->getElementsByTagName('identifier');
-    $resumption_node = $sub_dom->getElementsByTagName('resumptionToken')
-      ->item(0);
+    $resumption_node = $sub_dom->getElementsByTagName('resumptionToken')->item(0);
     $token = $resumption_node->nodeValue;
     $tokens++;
   }
@@ -56,7 +56,9 @@ function build_full_dom($url) {
  * @return array
  *   Associative array of xmls to be ingested.
  */
+
 function agile_get_streams_from_entry($identifier) {
+
   module_load_include('inc', 'islandora_marcxml', 'includes/utilities');
   $url = "http://pacscl.hosted.exlibrisgroup.com:48992/OAI?verb=GetRecord&identifier=$identifier&metadataPrefix=marc21";
   $marc_NS = "http://www.loc.gov/MARC21/slim";
@@ -72,6 +74,7 @@ function agile_get_streams_from_entry($identifier) {
     'DC' => $dc_record,
     'MARC' => $marc_record,
   ];
+
 }
 
 /**
@@ -109,13 +112,13 @@ function agile_lcp_get_pids_from_identifier($identifier) {
   $query_processor->solrQuery = "mods_recordInfo_recordIdentifier_s:$identifier";
   $query_processor->solrStart = 0;
   $query_processor->solrLimit = 10;
-  $query_processor->solrParams = [
+
+  $query_processor->solrParams = array(
     'fl' => "PID",
-  ];
+  );
   $query_processor->executeQuery(FALSE);
   $solr_results = $query_processor->islandoraSolrResult;
-  $pids = [];
-
+  $pids = array();
   if ($solr_results['response']['objects']) {
     foreach ($solr_results['response']['objects'] as $object) {
       $pids[] = $object['PID'];
@@ -138,10 +141,7 @@ function agile_lcp_get_duplicates() {
   $qp->solrParams['facet'] = 'true';
   $qp->solrParams['facet.limit'] = 200;
   $qp->solrParams['facet.mincount'] = 2;
-  $qp->solrParams['facet.field'] = [
-    'mods_recordInfo_recordIdentifier_s',
-    'RELS_EXT_hasModel_uri_s',
-  ];
+  $qp->solrParams['facet.field'] = array('mods_recordInfo_recordIdentifier_s', 'RELS_EXT_hasModel_uri_s');
   $qp->solrParams['fl'] = 'PID mods_recordInfo_recordIdentifier_s';
   $qp->executeQuery(FALSE);
   return $qp->islandoraSolrResult['facet_counts']['facet_fields']['mods_recordInfo_recordIdentifier_s'];
@@ -164,47 +164,44 @@ function agile_lcp_get_duplicates() {
  * @return string
  *   The transformed xml.
  */
-function agile_lcp_transform_with_saxonb($xsl_name, $doc, $params = []) {
+function agile_lcp_transform_with_saxonb($xsl_name, $doc, $params = array()) {
   $module_path = drupal_get_path('module', 'agile_lcp');
-  $xsl_path = format_string('!path/xml/!xsl', [
+  $xsl_path = format_string('!path/xml/!xsl', array(
     '!path' => $module_path,
     '!xsl' => $xsl_name,
-  ]);
-
-  $pipes = [];
+  ));
+  $pipes = array();
   $equal_join_and_escape = function ($key, $value) {
     return escapeshellarg("$key=$value");
   };
   $escaped = array_map($equal_join_and_escape, array_keys($params), $params);
   $param_string = implode(' ', $escaped);
-
   $process = proc_open("saxonb-xslt -versionmsg:off - $xsl_path $param_string",
-    [
-      0 => [
+    array(
+      0 => array(
         'pipe',
         'r',
-      ],
-      1 => [
+      ),
+      1 => array(
         'pipe',
         'w',
-      ],
-      2 => [
+      ),
+      2 => array(
         'file',
         '/dev/null',
         'a',
-      ],
-    ],
+      ),
+    ),
     $pipes
   );
-
   fwrite($pipes[0], $doc);
   fclose($pipes[0]);
   $saxonb_transformed = stream_get_contents($pipes[1]);
   fclose($pipes[1]);
   proc_close($process);
-
   return $saxonb_transformed;
 }
+
 
 /**
  * Get all pids from islandora:imported_oai collection.
@@ -229,10 +226,10 @@ EOQ;
     $results = $tuque->repository->ri->sparqlQuery($query);
     foreach ($results as $result) {
       $nid = db_insert('collection_pids')
-        ->fields([
+        ->fields(array(
           'pid' => $result['pid']['value'],
           'indexed' => 0,
-        ])
+        ))
         ->execute();
     }
   }

@@ -103,7 +103,7 @@ function agile_lcp_drush_command() {
 }
 
 /**
- * Kicks off series of sub-batches to harvest all OAI records from token.
+ * Kicks off serises of sub-batches to harvest all OAI records from token.
  */
 function drush_agile_lcp_agile_OAI_harvest_batch() {
   module_load_include('inc', 'agile_lcp', 'includes/db');
@@ -198,6 +198,7 @@ function agile_lcp_drush_build_object(string $identifier) {
     return;
   }
   $streams = agile_get_streams_from_entry($identifier);
+
   $tuque = new IslandoraTuque();
   $repository = $tuque->repository;
   $object = $repository->constructObject('islandora');
