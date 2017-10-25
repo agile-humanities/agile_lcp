@@ -190,9 +190,13 @@ function agile_lcp_add_OAI_batch_worker($token_id = NULL, $token = NULL, &$conte
  * @param String $identifier
  *   Unique OAI identifier
  */
-function agile_lcp_drush_build_object($identifier) {
+function agile_lcp_drush_build_object(string $identifier) {
   drush_print('.', 0, NULL, FALSE);
   module_load_include('inc', 'agile_lcp', 'includes/utilities');
+  $existing = agile_lcp_get_duplicates($identifier);
+  if ($existing) {
+    return;
+  }
   $streams = agile_get_streams_from_entry($identifier);
   $tuque = new IslandoraTuque();
   $repository = $tuque->repository;

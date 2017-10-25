@@ -115,6 +115,7 @@ function agile_lcp_get_pids_from_identifier($identifier) {
   $query_processor->executeQuery(FALSE);
   $solr_results = $query_processor->islandoraSolrResult;
   $pids = [];
+
   if ($solr_results['response']['objects']) {
     foreach ($solr_results['response']['objects'] as $object) {
       $pids[] = $object['PID'];
@@ -241,17 +242,60 @@ EOQ;
 /**
  * @param \AbstractObject $Object
  */
-function agile_update_marcXML(AbstractObject $object) {
-  $mods = $object['MODS']->content;
-  $dom = new DOMDocument();
-  $dom->loadXML($mods);
-  $identifiers = $dom->getElementsByTagName('recordIdentifier');
-  $identifier = $identifiers->item(0)->nodeValue;
+function agile_update_marcXML($object, $identifier) {
   $identifier_string = "oai:pacscl.hosted.exlibrisgroup.com:LCP01-$identifier";
   $streams = agile_get_streams_from_entry($identifier_string);
   foreach ($streams as $key =>$content) {
     $object[$key]->content = $content;
   }
   drupal_set_message(t('Updated records'));
-  drupal_goto("/islandora/object/{$object->id}/manage/datastreams");
+}
+
+/**
+ * @param \AbstractObject $object
+ *
+ * @return string
+ */
+function agile_lcp_get_identifier_from_marc (AbstractObject $object) {
+  $marc = $object['MARC']->content;
+  $dom = new DOMDocument();
+  $dom->loadXML($marc);
+  $xpath = new DOMXPath($dom);
+  $query = "//marc:controlfield[@tag = '001']";
+  $identifiers = $xpath->query($query);
+  if ($identifiers->length) {
+    return $identifiers->item(0)->nodeValue;
+  }
+  return NULL;
+}
+
+
+/**
+ * @param string $identifier
+ *
+ * @return array|null
+ */
+function agile_lcp_get_duplicates_from_identifier(string $identifier) {
+  $query_processor = new IslandoraSolrQueryProcessor();
+  $query_processor->solrQuery = "mods_recordInfo_recordIdentifier_s:$identifier";
+  $query_processor->solrStart = 0;
+  $query_processor->solrLimit = 100;
+  $query_processor->solrParams = [
+    'fl' => "PID RELS_EXT_hasModel_uri_s",
+  ];
+  $query_processor->executeQuery(FALSE);
+  $solr_results = $query_processor->islandoraSolrResult;
+  $pids = [];
+  $pids_to_delete = [];
+  if ($solr_results['response']['objects']) {
+    foreach ($solr_results['response']['objects'] as $object) {
+      $content_model = $object['solr_doc']['RELS_EXT_hasModel_uri_s'];
+      if ($content_model == 'info:fedora/islandora:oai_importCModel') {
+        $pids_to_delete[] = $object['PID'];
+      }
+      $pids[] = $object['PID'];
+    }
+  }
+  return count($pids) > count($pids_to_delete) ? $pids_to_delete : NULL;
+
 }

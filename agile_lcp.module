@@ -36,9 +36,9 @@ function agile_lcp_menu() {
     ),
    'islandora/object/%islandora_object/manage/datastreams/updatemxml' =>array(
       'title' => 'Update MarcXML',
-      'file' => 'includes/utilities.inc',
-      'page callback' => 'agile_update_marcXML',
-      'page arguments' => array(2),
+      'file' => 'includes/marc_reingest.form.inc',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('agile_reingest_marc_form', 2),
       'type' => MENU_LOCAL_ACTION,
       'access callback' => 'islandora_object_access_callback',
       'access arguments' => array(ISLANDORA_ADD_DS, 2),
