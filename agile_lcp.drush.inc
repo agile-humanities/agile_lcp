@@ -115,6 +115,16 @@ function agile_lcp_drush_command() {
     ],
     'aliases' => ['SOLR_INDEX'],
   ];
+    $items['mark_solr_pids'] = [
+      'description' => dt('Takes all pids form solr and updates cp table'),
+      'drupal dependencies' => [
+        'islandora',
+      ],
+      'examples' => [
+        'drush -u 1 mark_solr',
+      ],
+      'aliases' => ['mark_solr'],
+    ];
   return $items;
 }
 
@@ -342,7 +352,7 @@ function drush_agile_lcp_agile_OAI_prep_batch() {
 }
 
 /**
- * Gets all collection pids from resource index.
+ * Gets all pids from resource index and puts them in database.
  */
 function drush_agile_lcp_agile_get_collection_pids() {
   $result = db_select('collection_pids', 'cp')
@@ -354,10 +364,10 @@ function drush_agile_lcp_agile_get_collection_pids() {
   $iterations = drush_get_option('iterations', 1);
   $tuque = new IslandoraTuque();
   for ($i = 0; $i < $iterations; $i++) {
-    $offset = ($i * $limit) + $count;
+    $offset = ($i * $limit);
     $query = <<<EOQ
 PREFIX fm: <info:fedora/fedora-system:def/model#>
-SELECT  ?s 
+SELECT  distinct ?s 
 FROM <RISEARCH>
 WHERE
 {
@@ -374,6 +384,7 @@ EOQ;
     }
     foreach ($results as $result) {
       $pid = $result['s']['value'];
+      drush_print($pid);
       $nid = db_merge('collection_pids')
         ->key(['pid' => $pid])
         ->fields([
@@ -436,7 +447,7 @@ function drush_agile_lcp_solr_reindex() {
       ->range(0, 1000)
       ->execute()
       ->fetchAll();
-    if(!$results) {
+    if (!$results) {
       drush_print("All pids have been indexed");
       break;
     }
@@ -468,4 +479,33 @@ function drush_agile_lcp_solr_reindex() {
     drush_print(microtime(TRUE) - $start);
   }
 
+}
+
+function drush_agile_lcp_mark_solr_pids() {
+  $query = '*:*';
+  $limit = 4000;
+  $start = 0;
+  for ($i = 0; $i < 86; $i++) {
+    $qp = new IslandoraSolrQueryProcessor();
+    $qp->buildQuery('*:*');
+    $qp->solrParams['fq'] = $query;
+    $qp->solrStart = $start;
+    $qp->solrParams['fl'] = 'PID';
+    $qp->solrLimit = $limit;
+    $qp->executeQuery(FALSE);
+    $objects = $qp->islandoraSolrResult['response']['objects'];
+    if ($objects) {
+      foreach ($objects as $object) {
+        $pid = $object['PID'];
+        $num_updated = db_update('collection_pids')
+          ->fields([
+            'indexed' => 1,
+          ])
+          ->condition('pid', $pid)
+          ->execute();
+      }
+      drush_print("Batch $start completed.");
+      $start = $start + $limit;
+    }
+  }
 }
