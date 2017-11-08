@@ -129,12 +129,12 @@ function agile_lcp_get_pids_from_identifier($identifier) {
  *   PIDS
  */
 function agile_lcp_get_duplicates() {
-  $query = 'mods_recordInfo_recordIdentifier_s:* and RELS_EXT_hasModel_uri_s:"info:fedora/islandora:oai_importCModel"';
+  $query = 'mods_recordInfo_recordIdentifier_s:*';
   $qp = new IslandoraSolrQueryProcessor();
   $qp->buildQuery('*:*');
   $qp->solrParams['fq'] = $query;
   $qp->solrParams['facet'] = 'true';
-  $qp->solrParams['facet.limit'] = 200;
+  $qp->solrParams['facet.limit'] = 500;
   $qp->solrParams['facet.mincount'] = 2;
   $qp->solrParams['facet.field'] = [
     'mods_recordInfo_recordIdentifier_s',
@@ -142,7 +142,8 @@ function agile_lcp_get_duplicates() {
   ];
   $qp->solrParams['fl'] = 'PID mods_recordInfo_recordIdentifier_s';
   $qp->executeQuery(FALSE);
-  return $qp->islandoraSolrResult['facet_counts']['facet_fields']['mods_recordInfo_recordIdentifier_s'];
+  $identifiers = array_keys($qp->islandoraSolrResult['facet_counts']['facet_fields']['mods_recordInfo_recordIdentifier_s']);
+  return $identifiers;
 }
 
 /**
@@ -252,6 +253,9 @@ function agile_update_marcXML($object, $identifier) {
  * @return string
  */
 function agile_lcp_get_identifier_from_marc(AbstractObject $object) {
+  if (!$object['MARC']) {
+    return NULL;
+  }
   $marc = $object['MARC']->content;
   $dom = new DOMDocument();
   $dom->loadXML($marc);
@@ -318,3 +322,4 @@ function agile_lcp_get_oai_objects_from_identifier($identifier) {
   }
   return $oai_pids;
 }
+
