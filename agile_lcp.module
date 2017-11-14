@@ -132,7 +132,7 @@ function agile_lcp_islandora_solr_results_alter(&$search_results, $query_process
     }
   }
 
-  if ($doubles) {
+/*  if ($doubles) {
     foreach ($doubles as $index => $identifier) {
       if (in_array($identifier, $doubles)) {
         foreach ($pairings as $key => $params) {
@@ -142,7 +142,7 @@ function agile_lcp_islandora_solr_results_alter(&$search_results, $query_process
         }
       }
     }
-  }
+  }*/
   $search_results = array_values($search_results);
 }
 
@@ -401,12 +401,12 @@ function agile_lcp_islandora_object_ingested(AbstractObject $object) {
   module_load_include('inc', 'agile_lcp', 'includes/utilities');
   if (!in_array('islandora:oai_importCModel', $object->models)) {
     $identifier = agile_lcp_get_identifier_from_marc($object);
-    $oai_pids = agile_lcp_get_oai_objects_from_identifier($identifier);
-    foreach ($oai_pids as $oai_pid) {
-      $oai_object = islandora_object_load($oai_pid);
-      $oai_object->delete();
+    if ($identifier) {
+      $oai_pids = agile_lcp_get_oai_objects_from_identifier($identifier);
+      foreach ($oai_pids as $oai_pid) {
+        $oai_object = islandora_object_load($oai_pid);
+        $oai_object->delete();
+      }
     }
   }
-
-
 }

@@ -339,7 +339,7 @@ function drush_agile_lcp_agile_OAI_prep_batch() {
   $dom = new DOMDocument();
   $dom->loadXML($data);
   $resumption_node = $dom->getElementsByTagName('resumptionToken')->item(0);
-  $token = $resumption_node->nodeValue;
+  $token = $resumption_node ? $resumption_node->nodeValue : NULL;
   $count = 1;
   while ($token) {
     $new_url = $base_url . $token;
@@ -413,7 +413,7 @@ EOQ;
 }
 
 /**
- * One time funciton to remove processed PIDS from database table.
+ * One time function to remove processed PIDS from database table.
  */
 function drush_agile_lcp_agile_remove_indexed_collection_pids() {
   $result = db_select('collection_pids', 'cp')
@@ -521,6 +521,9 @@ function drush_agile_lcp_mark_solr_pids() {
   }
 }
 
+/**
+ * One time function to remove OAI duplicated functions
+ */
 function drush_agile_lcp_remove_duplicates() {
   drush_print("Removing duplicates...");
   module_load_include('inc', 'agile_lcp', 'includes/utilities');
@@ -528,6 +531,8 @@ function drush_agile_lcp_remove_duplicates() {
   $total = count($duplicate_identifiers);
   drush_print("$total found");
   foreach ($duplicate_identifiers as $identifier) {
+    $pids_to_delete = [];
+    $oai_only = TRUE;
     $query_processor = new IslandoraSolrQueryProcessor();
     $query_processor->solrQuery = "mods_recordInfo_recordIdentifier_s:$identifier";
     $query_processor->solrStart = 0;
@@ -537,37 +542,25 @@ function drush_agile_lcp_remove_duplicates() {
     ];
     $query_processor->executeQuery(FALSE);
     $solr_results = $query_processor->islandoraSolrResult;
-    $pids_to_delete = [];
-    $pids_to_ignore = [];
 
     if ($solr_results['response']['objects']) {
       foreach ($solr_results['response']['objects'] as $object) {
+
         if ($object['solr_doc']['RELS_EXT_hasModel_uri_s'] == 'info:fedora/islandora:oai_importCModel') {
           $pids_to_delete[] = $object['PID'];
         }
         else {
-          $pids_to_ignore[] = $object['PID'];
+          $oai_only = FALSE;
         }
       }
-    }
-    if ($pids_to_ignore) {
+      if ($oai_only) {
+        array_shift($pids_to_delete);
+      }
       foreach ($pids_to_delete as $pid) {
         $obj = islandora_object_load($pid);
         drush_print("Deleting $obj->id");
         $obj->delete();
-
-      }
-    }
-    else {
-      if (count($pids_to_ignore) > 1) {
-        array_shift($pids_to_ignore);
-        foreach ($pids_to_ignore as $pid) {
-          $obj = islandora_object_load($pid);
-          drush_print("Deleting duplicated OAI $obj->id");
-          $obj->delete();
-        }
       }
     }
   }
-
 }

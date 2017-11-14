@@ -239,9 +239,17 @@ EOQ;
  * @param \AbstractObject $Object
  */
 function agile_update_marcXML($object, $identifier) {
-  $identifier_string = "oai:pacscl.hosted.exlibrisgroup.com:LCP01-$identifier";
   $streams = agile_get_streams_from_entry($identifier);
+  // Allow MARC content for objects without existing MarcXML.
   foreach ($streams as $key => $content) {
+    if ($key == "MARC" && !$object['MARC']) {
+      $ds = $object->constructDatastream('MARC', 'M');
+      $ds->label = 'MARC';
+      $ds->mimetype = 'text/xml';
+      $ds->content = $content;
+      $object->ingestDatastream($ds);
+      continue;
+    }
     $object[$key]->content = $content;
   }
   drupal_set_message(t('Updated records'));
@@ -306,7 +314,7 @@ function agile_lcp_get_duplicates_from_identifier(string $identifier) {
  *
  * @return array
  */
-function agile_lcp_get_oai_objects_from_identifier($identifier) {
+function agile_lcp_get_oai_objects_from_identifier($identifier = NULL) {
   $query_processor = new IslandoraSolrQueryProcessor();
   $query_processor->solrQuery = "+mods_recordInfo_recordIdentifier_s:$identifier +RELS_EXT_hasModel_uri_s:\"info:fedora/islandora:oai_importCModel\" ";
   $query_processor->solrStart = 0;
