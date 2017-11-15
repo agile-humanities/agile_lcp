@@ -103,6 +103,10 @@ function agile_lcp_run_xsl_transform($info) {
  *   Array of pids
  */
 function agile_lcp_get_pids_from_identifier($identifier) {
+  $pids = [];
+  if (!is_numeric($identifier)) {
+    return $pids;
+  }
   $query_processor = new IslandoraSolrQueryProcessor();
   $query_processor->solrQuery = "mods_recordInfo_recordIdentifier_s:$identifier";
   $query_processor->solrStart = 0;
@@ -113,7 +117,7 @@ function agile_lcp_get_pids_from_identifier($identifier) {
   ];
   $query_processor->executeQuery(FALSE);
   $solr_results = $query_processor->islandoraSolrResult;
-  $pids = [];
+
   if ($solr_results['response']['objects']) {
     foreach ($solr_results['response']['objects'] as $object) {
       $pids[] = $object['PID'];
