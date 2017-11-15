@@ -53,7 +53,8 @@ function build_full_dom($url) {
  */
 
 function agile_get_streams_from_entry($identifier) {
-
+  // Remove OAI qualifier from MARC identifier.
+  $identifier = preg_replace('/oai:pacscl.hosted.exlibrisgroup.com:LCP01-/', '', $identifier);
   module_load_include('inc', 'islandora_marcxml', 'includes/utilities');
   $url = "http://pacscl.hosted.exlibrisgroup.com:48992/OAI?verb=GetRecord&identifier=oai:pacscl.hosted.exlibrisgroup.com:LCP01-$identifier&metadataPrefix=marc21";
   $marc_NS = "http://www.loc.gov/MARC21/slim";
@@ -103,6 +104,8 @@ function agile_lcp_run_xsl_transform($info) {
  *   Array of pids
  */
 function agile_lcp_get_pids_from_identifier($identifier) {
+  // Remove OAI qualifier from MARC identifier.
+  $identifier = preg_replace('/oai:pacscl.hosted.exlibrisgroup.com:LCP01-/', '', $identifier);
   $pids = [];
   if (!is_numeric($identifier)) {
     return $pids;
