@@ -208,6 +208,7 @@ function agile_lcp_add_OAI_batch_worker($token_id = NULL, $token = NULL, &$conte
     'agile_lcp_batch_notifier',
     [
       'token_id' => $token_id,
+      'token' => $token,
     ],
   ];
   foreach ($new_identifiers as $new_identifier) {
@@ -250,6 +251,7 @@ function agile_lcp_drush_build_object(string $identifier) {
         }
       }
     }
+    drush_print("Updated $pid.  Identifier = $identifier");
     return;
   }
 
@@ -281,6 +283,7 @@ function agile_lcp_drush_build_object(string $identifier) {
 
   try {
     islandora_add_object($object);
+    drush_print("Added {$object->id}.  Identifier = $identifier");
   } catch (Exception $ex) {
     drush_print("Failed to ingest $identifier");
   }
@@ -292,8 +295,8 @@ function agile_lcp_drush_build_object(string $identifier) {
  * @param string $token_id
  *   OAI token
  */
-function agile_lcp_batch_notifier($token_id) {
-  drush_print("\n Start sub_batch - Processing token #$token_id");
+function agile_lcp_batch_notifier($token_id, $token) {
+  drush_print("\n Start sub_batch - Processing token #$token_id - $token");
 }
 
 /**
