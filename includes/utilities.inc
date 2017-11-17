@@ -61,6 +61,10 @@ function agile_get_streams_from_entry($identifier) {
   $input = file_get_contents($url);
   $dom = new DOMDocument();
   $dom->loadXML($input);
+  $deleted = $dom->getElementsByTagName('header')->item(0)->getAttribute('status') == 'deleted';
+  if ($deleted) {
+    return NULL;
+  }
   $record_node = $dom->getElementsByTagNameNS($marc_NS, 'record')->item(0);
   $marc_record = $dom->saveXML($record_node);
   $mods_record = trim(agile_lcp_transform_with_saxonb('MARC21slim2MODS3-5_LCP.xsl', $marc_record));
@@ -103,15 +107,16 @@ function agile_lcp_run_xsl_transform($info) {
  * @return array
  *   Array of pids
  */
-function agile_lcp_get_pids_from_identifier($identifier) {
+function agile_lcp_get_pids_from_identifier($identifier, $oai_only = FALSE) {
   // Remove OAI qualifier from MARC identifier.
   $identifier = preg_replace('/oai:pacscl.hosted.exlibrisgroup.com:LCP01-/', '', $identifier);
   $pids = [];
   if (!is_numeric($identifier)) {
     return $pids;
   }
+  $qualifier = $oai_only ? '' : '+PID RELS_EXT_hasModel_uri_s:"info:fedora/islandora:imported_oai"';
   $query_processor = new IslandoraSolrQueryProcessor();
-  $query_processor->solrQuery = "mods_recordInfo_recordIdentifier_s:$identifier";
+  $query_processor->solrQuery = "+mods_recordInfo_recordIdentifier_s:$identifier $qualifier";
   $query_processor->solrStart = 0;
   $query_processor->solrLimit = 10;
 
@@ -338,3 +343,20 @@ function agile_lcp_get_oai_objects_from_identifier($identifier = NULL) {
   return $oai_pids;
 }
 
+function agile_lcp_find_empty_objects() {
+  $query_processor = new IslandoraSolrQueryProcessor();
+  $query_processor->solrQuery = '-mods_titleInfo_title_s:* +fedora_datastreams_ms:MODS +RELS_EXT_hasModel_uri_s:"info:fedora/islandora:oai_importCModel"';
+  $query_processor->solrStart = 0;
+  $query_processor->solrLimit = 100;
+  $query_processor->solrParams = [
+    'fl' => "PID",
+  ];
+  $query_processor->executeQuery(FALSE);
+  $pids = [];
+  $solr_results = $query_processor->islandoraSolrResult;
+  foreach ($solr_results['response']['objects'] as $object) {
+    $pids[] = $object['PID'];
+  }
+
+  return $pids;
+}

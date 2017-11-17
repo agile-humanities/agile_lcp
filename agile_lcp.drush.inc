@@ -240,9 +240,27 @@ function agile_lcp_add_OAI_batch_worker($token_id = NULL, $token = NULL, &$conte
 function agile_lcp_drush_build_object(string $identifier) {
   drush_print('.', 0, NULL, FALSE);
   module_load_include('inc', 'agile_lcp', 'includes/utilities');
-  $existing = agile_lcp_get_pids_from_identifier($identifier);
+
   $streams = agile_get_streams_from_entry($identifier);
-  if ($existing) {
+  $existing = agile_lcp_get_pids_from_identifier($identifier);
+  // Streams are not returned if OAI record has been deleted.
+  if (!$streams) {
+    if(!$existing) {
+      drush_print(" Record $identifier has deleted status.  Not added");
+    }
+    else {
+      // Remove current OAI records, if record has been deleted since original ingest.
+      $oai_records = agile_lcp_get_pids_from_identifier($identifier, TRUE);
+      $tuque = new IslandoraTuque();
+      foreach ($oai_records as $pid) {
+        $tuque->repository->purgeObject($pid);
+        drush_print(" Object $pid  with identifier $identifier has been deleted.");
+      }
+    }
+    return;
+  }
+
+  if ($existing ) {
     foreach ($existing as $pid) {
       $object = islandora_object_load($pid);
       foreach ($streams as $dsid => $content) {
@@ -275,7 +293,6 @@ function agile_lcp_drush_build_object(string $identifier) {
     $mime = ($dsid == 'DC') ? 'text/xml' : 'application/xml';
     $ds = $object->constructDatastream($dsid, $type);
     $ds->setContentFromString($content, FALSE);
-    $mime_detect = new MimeDetect();
     $ds->label = $dsid;
     $ds->mimetype = $mime;
     $object->ingestDatastream($ds);
